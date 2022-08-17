@@ -8,7 +8,7 @@ from tkinter.tix import IMMEDIATE
 from urllib.parse import uses_relative
 from webbrowser import get
 from flask import(
-    blueprints, flash, g, render_template, request,url_for, session
+    blueprints, flash, g, render_template, request,url_for, session, redirect
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 from todo.db import get_db
@@ -62,8 +62,36 @@ def login():
         if error is None:
             session.clear()
             session['user_id'] = user['id']
-            return redirect(url_for('index'))
+            return redirect(url_for('todo.index'))
 
         flash(error)
 
-    return render_template('auth/')
+    return render_template('auth/login.html')
+
+@bp.before_app_request
+def load_logged_in_user():
+    user_id = session.get('user_id')
+
+    if user_id is None:
+        g.user = None
+    else:
+        db, c = get_db()
+        c.execute(
+            'select * from user where id = %s', (user_id, )
+        )
+        g.user = c.fetchone()
+
+def login_required(view):
+    @functools.wraps(view)
+    def wrapped_view(**kwargs):
+        if g.user is None:
+            return redirect(url_for('auth.login'))
+
+        return view(**kwargs)
+
+    return wrapped_view
+
+@bp.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
